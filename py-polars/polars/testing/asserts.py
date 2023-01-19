@@ -75,13 +75,11 @@ def assert_frame_equal(
     elif left.shape[0] != right.shape[0]:
         raise_assert_detail(obj, "Length mismatch", left.shape, right.shape)
 
-    left_not_right = [c for c in left.columns if c not in right.columns]
-    if left_not_right:
+    if left_not_right := [c for c in left.columns if c not in right.columns]:
         raise AssertionError(
             f"Columns {left_not_right} in left frame, but not in right"
         )
-    right_not_left = [c for c in right.columns if c not in left.columns]
-    if right_not_left:
+    if right_not_left := [c for c in right.columns if c not in left.columns]:
         raise AssertionError(
             f"Columns {right_not_left} in right frame, but not in left"
         )
@@ -231,9 +229,8 @@ def assert_series_equal(
     if left.shape != right.shape:
         raise_assert_detail(obj, "Shape mismatch", left.shape, right.shape)
 
-    if check_names:
-        if left.name != right.name:
-            raise_assert_detail(obj, "Name mismatch", left.name, right.name)
+    if check_names and left.name != right.name:
+        raise_assert_detail(obj, "Name mismatch", left.name, right.name)
 
     _assert_series_inner(
         left, right, check_dtype, check_exact, nans_compare_equal, atol, rtol, obj
@@ -315,9 +312,8 @@ def _assert_series_inner(
         can_be_subtracted = False
 
     check_exact = check_exact or not can_be_subtracted or left.dtype == Boolean
-    if check_dtype:
-        if left.dtype != right.dtype:
-            raise_assert_detail(obj, "Dtype mismatch", left.dtype, right.dtype)
+    if check_dtype and left.dtype != right.dtype:
+        raise_assert_detail(obj, "Dtype mismatch", left.dtype, right.dtype)
 
     # confirm that we can call 'is_nan' on both sides
     left_is_float = left.dtype in (Float32, Float64)

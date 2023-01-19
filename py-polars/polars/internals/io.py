@@ -86,7 +86,7 @@ def _prepare_file_arg(
     has_non_utf8_non_utf8_lossy_encoding = (
         encoding not in {"utf8", "utf8-lossy"} if encoding else False
     )
-    encoding_str = encoding if encoding else "utf8"
+    encoding_str = encoding or "utf8"
 
     if isinstance(file, bytes):
         if has_non_utf8_non_utf8_lossy_encoding:
@@ -116,21 +116,28 @@ def _prepare_file_arg(
         if _FSSPEC_AVAILABLE:
             from fsspec.utils import infer_storage_options
 
-            if not has_non_utf8_non_utf8_lossy_encoding:
-                if infer_storage_options(file)["protocol"] == "file":
-                    return managed_file(normalise_filepath(file))
+            if (
+                not has_non_utf8_non_utf8_lossy_encoding
+                and infer_storage_options(file)["protocol"] == "file"
+            ):
+                return managed_file(normalise_filepath(file))
             kwargs["encoding"] = encoding
             return fsspec.open(file, **kwargs)
 
-    if isinstance(file, list) and bool(file) and all(isinstance(f, str) for f in file):
-        if _FSSPEC_AVAILABLE:
-            from fsspec.utils import infer_storage_options
+    if (
+        isinstance(file, list)
+        and bool(file)
+        and all(isinstance(f, str) for f in file)
+        and _FSSPEC_AVAILABLE
+    ):
+        from fsspec.utils import infer_storage_options
 
-            if not has_non_utf8_non_utf8_lossy_encoding:
-                if all(infer_storage_options(f)["protocol"] == "file" for f in file):
-                    return managed_file([normalise_filepath(f) for f in file])
-            kwargs["encoding"] = encoding
-            return fsspec.open_files(file, **kwargs)
+        if not has_non_utf8_non_utf8_lossy_encoding and all(
+            infer_storage_options(f)["protocol"] == "file" for f in file
+        ):
+            return managed_file([normalise_filepath(f) for f in file])
+        kwargs["encoding"] = encoding
+        return fsspec.open_files(file, **kwargs)
 
     if isinstance(file, str):
         file = normalise_filepath(file)

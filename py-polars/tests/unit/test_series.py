@@ -301,10 +301,7 @@ def test_arithmetic(s: pl.Series) -> None:
 
     # integer division
     assert_series_equal(1 / a, pl.Series([1.0, 0.5]))
-    if s.dtype == Int64:
-        expected = pl.Series([1, 0])
-    else:
-        expected = pl.Series([1.0, 0.5])
+    expected = pl.Series([1, 0]) if s.dtype == Int64 else pl.Series([1.0, 0.5])
     assert_series_equal(1 // a, expected)
     # modulo
     assert ((1 % a) == [0, 1]).sum() == 2
@@ -837,7 +834,7 @@ def test_fill_nan() -> None:
 
 def test_apply() -> None:
     a = pl.Series("a", [1, 2, None])
-    b = a.apply(lambda x: x**2)
+    b = a**2
     assert list(b) == [1, 4, None]
 
     a = pl.Series("a", ["foo", "bar", None])
@@ -1036,7 +1033,7 @@ def test_describe() -> None:
     date_s = pl.Series([date(2021, 1, 1), date(2021, 1, 2), date(2021, 1, 3)])
     empty_s = pl.Series(np.empty(0))
 
-    assert {k: v for k, v in num_s.describe().rows()} == {
+    assert dict(num_s.describe().rows()) == {
         "count": 3.0,
         "max": 3.0,
         "mean": 2.0,
@@ -1044,7 +1041,7 @@ def test_describe() -> None:
         "null_count": 0.0,
         "std": 1.0,
     }
-    assert {k: v for k, v in float_s.describe().rows()} == {
+    assert dict(float_s.describe().rows()) == {
         "count": 3.0,
         "max": 8.9,
         "mean": 4.933333333333334,
@@ -1052,17 +1049,17 @@ def test_describe() -> None:
         "null_count": 0.0,
         "std": 3.8109491381194442,
     }
-    assert {k: v for k, v in str_s.describe().rows()} == {
+    assert dict(str_s.describe().rows()) == {
         "count": 3,
         "null_count": 0,
         "unique": 3,
     }
-    assert {k: v for k, v in bool_s.describe().rows()} == {
+    assert dict(bool_s.describe().rows()) == {
         "count": 5,
         "null_count": 1,
         "sum": 3,
     }
-    assert {k: v for k, v in date_s.describe().rows()} == {
+    assert dict(date_s.describe().rows()) == {
         "count": "3",
         "max": "2021-01-03",
         "min": "2021-01-01",
@@ -1472,7 +1469,6 @@ def test_from_generator_or_iterable() -> None:
     def gen(n: int) -> Iterator[int]:
         yield from range(n)
 
-    # iterable object
     class Data:
         def __init__(self, n: int):
             self._n = n
@@ -1483,11 +1479,7 @@ def test_from_generator_or_iterable() -> None:
     expected = pl.Series("s", range(10))
     assert expected.dtype == pl.Int64
 
-    for generated_series in (
-        pl.Series("s", values=gen(10)),
-        pl.Series("s", values=Data(10)),
-        pl.Series("s", values=(x for x in gen(10))),
-    ):
+    for generated_series in (pl.Series("s", values=gen(10)), pl.Series("s", values=Data(10)), pl.Series("s", values=iter(gen(10)))):
         assert_series_equal(expected, generated_series)
 
     # test 'iterable_to_pyseries' directly to validate 'chunk_size' behaviour

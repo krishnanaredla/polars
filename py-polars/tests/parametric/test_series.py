@@ -60,7 +60,7 @@ def test_ewm_methods(
         for mp in range(2, len(s), len(s) // 3):
             # consolidate ewm parameters
             pl_params = {"min_periods": mp, "adjust": adjust}
-            pl_params.update(decay_param)
+            pl_params |= decay_param
 
             pd_params = pl_params.copy()
             if "half_life" in pl_params:

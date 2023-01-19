@@ -207,17 +207,16 @@ def col(
     ):
         if len(name) == 0:
             return pli.wrap_expr(pycols(name))
+        names = list(name)
+        item = names[0]
+        if isinstance(item, str):
+            return pli.wrap_expr(pycols(names))
+        elif is_polars_dtype(item):
+            return pli.wrap_expr(_dtype_cols(names))
         else:
-            names = list(name)
-            item = names[0]
-            if isinstance(item, str):
-                return pli.wrap_expr(pycols(names))
-            elif is_polars_dtype(item):
-                return pli.wrap_expr(_dtype_cols(names))
-            else:
-                raise ValueError(
-                    "Expected list values to be all `str` or all `DataType`"
-                )
+            raise ValueError(
+                "Expected list values to be all `str` or all `DataType`"
+            )
 
     return pli.wrap_expr(pycol(name))
 
@@ -321,9 +320,7 @@ def count(column: str | pli.Series | None = None) -> pli.Expr | int:
     if column is None:
         return pli.wrap_expr(_count())
 
-    if isinstance(column, pli.Series):
-        return column.len()
-    return col(column).count()
+    return column.len() if isinstance(column, pli.Series) else col(column).count()
 
 
 def to_list(name: str) -> pli.Expr:
@@ -727,9 +724,7 @@ def mean(column: str | pli.Series) -> pli.Expr | float:
     4.0
 
     """
-    if isinstance(column, pli.Series):
-        return column.mean()
-    return col(column).mean()
+    return column.mean() if isinstance(column, pli.Series) else col(column).mean()
 
 
 @overload
@@ -1126,11 +1121,7 @@ def lit(
     if isinstance(value, datetime):
         tu = "us"
         e = lit(_datetime_to_pl_timestamp(value, tu)).cast(Datetime(tu))
-        if value.tzinfo is not None:
-            return e.dt.tz_localize(str(value.tzinfo))
-        else:
-            return e
-
+        return e.dt.tz_localize(str(value.tzinfo)) if value.tzinfo is not None else e
     elif isinstance(value, timedelta):
         tu = "us"
         return lit(_timedelta_to_pl_timedelta(value, tu)).cast(Duration(tu))
@@ -1145,10 +1136,7 @@ def lit(
         name = value.name
         value = value._s
         e = pli.wrap_expr(pylit(value, allow_object))
-        if name == "":
-            return e
-        return e.alias(name)
-
+        return e if name == "" else e.alias(name)
     if _check_for_numpy(value) and isinstance(value, np.ndarray):
         return lit(pli.Series("", value))
 
@@ -1821,15 +1809,16 @@ def arange(
 
     if dtype is not None and dtype != Int64:
         range_expr = range_expr.cast(dtype)
-    if not eager:
-        return range_expr
-    else:
-        return (
+    return (
+        (
             pli.DataFrame()
             .select(range_expr)
             .to_series()
             .rename("arange", in_place=True)
         )
+        if eager
+        else range_expr
+    )
 
 
 def argsort_by(
@@ -2244,10 +2233,7 @@ def collect_all(
 
     out = _collect_all(prepared)
 
-    # wrap the pydataframes into dataframe
-    result = [pli.wrap_df(pydf) for pydf in out]
-
-    return result
+    return [pli.wrap_df(pydf) for pydf in out]
 
 
 def select(
@@ -2441,8 +2427,7 @@ def repeat(
         if name is None:
             name = ""
         dtype = py_type_to_dtype(type(value))
-        s = pli.Series._repeat(name, value, n, dtype)  # type: ignore[arg-type]
-        return s
+        return pli.Series._repeat(name, value, n, dtype)
     else:
         if isinstance(n, int):
             n = lit(n)

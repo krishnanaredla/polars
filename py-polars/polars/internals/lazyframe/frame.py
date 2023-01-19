@@ -151,9 +151,7 @@ class LazyFrame:
         """
         dtype_list: list[tuple[str, PolarsDataType]] | None = None
         if dtypes is not None:
-            dtype_list = []
-            for k, v in dtypes.items():
-                dtype_list.append((k, py_type_to_dtype(v)))
+            dtype_list = [(k, py_type_to_dtype(v)) for k, v in dtypes.items()]
         processed_null_values = _process_null_values(null_values)
 
         self = cls.__new__(cls)
@@ -359,7 +357,7 @@ class LazyFrame:
         self = cls.__new__(cls)
         if isinstance(schema, dict):
             self._ldf = PyLazyFrame.scan_from_python_function_pl_schema(
-                [(name, dt) for name, dt in schema.items()], scan_fn, pyarrow
+                list(schema.items()), scan_fn, pyarrow
             )
         else:
             self._ldf = PyLazyFrame.scan_from_python_function_arrow_schema(
@@ -773,7 +771,7 @@ naive plan: (run LazyFrame.describe_optimized_plan() to see the optimized plan)
 
         try:
             graph = subprocess.check_output(
-                ["dot", "-Nshape=box", "-T" + output_type], input=f"{dot}".encode()
+                ["dot", "-Nshape=box", f"-T{output_type}"], input=f"{dot}".encode()
             )
         except (ImportError, FileNotFoundError):
             raise ImportError("Graphviz dot binary should be on your PATH") from None
@@ -2123,11 +2121,7 @@ naive plan: (run LazyFrame.describe_optimized_plan() to see the optimized plan)
 
         """  # noqa: E501
         if offset is None:
-            if period is None:
-                offset = f"-{every}"
-            else:
-                offset = "0ns"
-
+            offset = f"-{every}" if period is None else "0ns"
         if period is None:
             period = every
 
@@ -2284,17 +2278,9 @@ naive plan: (run LazyFrame.describe_optimized_plan() to see the optimized plan)
             raise ValueError("You should pass the column to join on as an argument.")
 
         by_left_: Sequence[str] | None
-        if isinstance(by_left, str):
-            by_left_ = [by_left]
-        else:
-            by_left_ = by_left
-
+        by_left_ = [by_left] if isinstance(by_left, str) else by_left
         by_right_: Sequence[str] | None
-        if isinstance(by_right, (str, pli.Expr)):
-            by_right_ = [by_right]
-        else:
-            by_right_ = by_right
-
+        by_right_ = [by_right] if isinstance(by_right, (str, pli.Expr)) else by_right
         if isinstance(by, str):
             by_left_ = [by]
             by_right_ = [by]

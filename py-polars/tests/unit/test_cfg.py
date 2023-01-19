@@ -430,14 +430,14 @@ def test_config_load_save() -> None:
 
     # ...and confirm the saved options were set
     assert os.environ["POLARS_VERBOSE"] == "1"
-    assert pl.Config.with_columns_kwargs is True
+    assert pl.Config.with_columns_kwargs
 
     # restore explicitly-set config options (unsets from env)
     pl.Config.restore_defaults()
     assert "POLARS_VERBOSE" not in pl.Config.state(if_set=True)
     assert "POLARS_VERBOSE" in pl.Config.state()
     assert os.environ.get("POLARS_VERBOSE") is None
-    assert pl.Config.with_columns_kwargs is False
+    assert not pl.Config.with_columns_kwargs
 
 
 def test_config_scope() -> None:

@@ -182,28 +182,27 @@ class column:
                 raise InvalidArgument(
                     f"No strategy (currently) available for {self.dtype} type"
                 )
-            else:
-                # given a custom strategy, but no explicit dtype. infer one
-                # from the first non-None value that the strategy produces.
-                with warnings.catch_warnings():
-                    # note: usually you should not call "example()" outside of an
-                    # interactive shell, hence the warning. however, here it is
-                    # reasonable to do so, so we catch and ignore it
-                    warnings.simplefilter("ignore", NonInteractiveExampleWarning)
-                    sample_value_iter = (
-                        self.strategy.example()  # type: ignore[union-attr]
-                        for _ in range(100)
+            # given a custom strategy, but no explicit dtype. infer one
+            # from the first non-None value that the strategy produces.
+            with warnings.catch_warnings():
+                # note: usually you should not call "example()" outside of an
+                # interactive shell, hence the warning. however, here it is
+                # reasonable to do so, so we catch and ignore it
+                warnings.simplefilter("ignore", NonInteractiveExampleWarning)
+                sample_value_iter = (
+                    self.strategy.example()  # type: ignore[union-attr]
+                    for _ in range(100)
+                )
+                try:
+                    sample_value_type = type(
+                        next(e for e in sample_value_iter if e is not None)
                     )
-                    try:
-                        sample_value_type = type(
-                            next(e for e in sample_value_iter if e is not None)
-                        )
-                    except StopIteration:
-                        raise InvalidArgument(
-                            "Unable to determine dtype for strategy"
-                        ) from None
-                if sample_value_type is not None:
-                    self.dtype = py_type_to_dtype(sample_value_type)
+                except StopIteration:
+                    raise InvalidArgument(
+                        "Unable to determine dtype for strategy"
+                    ) from None
+            if sample_value_type is not None:
+                self.dtype = py_type_to_dtype(sample_value_type)
 
 
 def columns(
@@ -435,10 +434,9 @@ def series(
         )
         if is_categorical_dtype(dtype):
             s = s.cast(Categorical)
-        if series_size:
-            if chunked or (chunked is None and draw(booleans())):
-                split_at = series_size // 2
-                s = s[:split_at].append(s[split_at:], append_chunks=True)
+        if series_size and (chunked or (chunked is None and draw(booleans()))):
+            split_at = series_size // 2
+            s = s[:split_at].append(s[split_at:], append_chunks=True)
         return s
 
     return draw_series()
@@ -556,9 +554,8 @@ def dataframes(
     """  # noqa: 501
     if isinstance(cols, int):
         cols = columns(cols)
-    if isinstance(min_size, int):
-        if min_cols in (0, None):
-            min_cols = 1
+    if isinstance(min_size, int) and min_cols in (0, None):
+        min_cols = 1
 
     selectable_dtypes = [
         dtype

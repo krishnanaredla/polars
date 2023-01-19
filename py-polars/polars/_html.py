@@ -57,21 +57,17 @@ class HTMLFormatter:
         self.col_idx: Iterable[int]
 
         if max_rows < df.height:
-            self.row_idx = (
-                list(range(0, max_rows // 2))
-                + [-1]
-                + list(range(df.height - max_rows // 2, df.height))
+            self.row_idx = (list(range(max_rows // 2)) + [-1]) + list(
+                range(df.height - max_rows // 2, df.height)
             )
         else:
-            self.row_idx = range(0, df.height)
+            self.row_idx = range(df.height)
         if max_cols < df.width:
-            self.col_idx = (
-                list(range(0, max_cols // 2))
-                + [-1]
-                + list(range(df.width - max_cols // 2, df.width))
+            self.col_idx = (list(range(max_cols // 2)) + [-1]) + list(
+                range(df.width - max_cols // 2, df.width)
             )
         else:
-            self.col_idx = range(0, df.width)
+            self.col_idx = range(df.width)
 
     def write_header(self) -> None:
         """Write the header of an HTML table."""
@@ -177,8 +173,6 @@ def in_vscode_notebook() -> bool:
         # autoimported by notebooks
         get_ipython()  # type: ignore[name-defined]
         os.environ["VSCODE_CWD"]
-    except NameError:
+    except (NameError, KeyError):
         return False  # not in notebook
-    except KeyError:
-        return False  # not in VSCode
     return True
