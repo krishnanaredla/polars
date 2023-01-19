@@ -114,7 +114,7 @@ def test_shuffle() -> None:
 
 
 def test_sample() -> None:
-    a = pl.Series("a", range(0, 20))
+    a = pl.Series("a", range(20))
     out = pl.select(
         pl.lit(a).sample(frac=0.5, with_replacement=False, seed=1)
     ).to_series()

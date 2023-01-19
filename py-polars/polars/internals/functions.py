@@ -217,7 +217,7 @@ def concat(
     └─────┴──────┴──────┘
 
     """
-    if not len(items) > 0:
+    if len(items) <= 0:
         raise ValueError("cannot concat empty list")
 
     out: pli.Series | pli.DataFrame | pli.LazyFrame | pli.Expr
@@ -252,9 +252,7 @@ def concat(
     else:
         raise ValueError(f"did not expect type: {type(first)} in 'pl.concat'.")
 
-    if rechunk:
-        return out.rechunk()
-    return out
+    return out.rechunk() if rechunk else out
 
 
 def _ensure_datetime(value: date | datetime) -> tuple[datetime, bool]:
@@ -451,12 +449,15 @@ def date_range(
                 f" Got: '{low.tzinfo}' and '{high.tzinfo}'."
             )
 
-        if time_zone is not None and low.tzinfo is not None:
-            if str(low.tzinfo) != time_zone:
-                raise ValueError(
-                    "Given time_zone is different from that timezone aware datetimes."
-                    f" Given: '{time_zone}', got: '{low.tzinfo}'."
-                )
+        if (
+            time_zone is not None
+            and low.tzinfo is not None
+            and str(low.tzinfo) != time_zone
+        ):
+            raise ValueError(
+                "Given time_zone is different from that timezone aware datetimes."
+                f" Given: '{time_zone}', got: '{low.tzinfo}'."
+            )
         if time_zone is None:
             time_zone = str(low.tzinfo)
 
@@ -563,7 +564,7 @@ def cut(
 
     cuts_df = cuts_df.with_column(pli.col(category_label).cast(Categorical))
 
-    result = (
+    return (
         s.cast(Float64)
         .sort()
         .to_frame()
@@ -574,7 +575,6 @@ def cut(
             strategy="forward",
         )
     )
-    return result
 
 
 @overload

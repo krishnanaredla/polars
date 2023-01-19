@@ -75,8 +75,8 @@ def test_join_same_cat_src() -> None:
 
 
 def test_sorted_merge_joins() -> None:
+    n = 30
     for reverse in [False, True]:
-        n = 30
         df_a = pl.DataFrame(
             {"a": np.sort(np.random.randint(0, n // 2, n))}
         ).with_row_count("row_a")

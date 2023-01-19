@@ -221,12 +221,11 @@ class Series:
         if name is None:
             name = ""
         elif not isinstance(name, str):
-            if values is None:
-                values = name
-                name = ""
-            else:
+            if values is not None:
                 raise ValueError("Series name must be a string.")
 
+            values = name
+            name = ""
         if values is None:
             self._s = sequence_to_pyseries(
                 name, [], dtype=dtype, dtype_if_empty=dtype_if_empty
@@ -421,17 +420,17 @@ class Series:
     def _comp(self, other: Any, op: ComparisonOperator) -> Series:
         if isinstance(other, datetime) and self.dtype == Datetime:
             ts = _datetime_to_pl_timestamp(other, self.time_unit)
-            f = get_ffi_func(op + "_<>", Int64, self._s)
+            f = get_ffi_func(f"{op}_<>", Int64, self._s)
             assert f is not None
             return wrap_s(f(ts))
         if isinstance(other, time) and self.dtype == Time:
             d = _time_to_pl_time(other)
-            f = get_ffi_func(op + "_<>", Int64, self._s)
+            f = get_ffi_func(f"{op}_<>", Int64, self._s)
             assert f is not None
             return wrap_s(f(d))
         if isinstance(other, date) and self.dtype == Date:
             d = _date_to_pl_date(other)
-            f = get_ffi_func(op + "_<>", Int32, self._s)
+            f = get_ffi_func(f"{op}_<>", Int32, self._s)
             assert f is not None
             return wrap_s(f(d))
 
@@ -442,11 +441,8 @@ class Series:
 
         if other is not None:
             other = maybe_cast(other, self.dtype, self.time_unit)
-        f = get_ffi_func(op + "_<>", self.dtype, self._s)
-        if f is None:
-            return NotImplemented
-
-        return wrap_s(f(other))
+        f = get_ffi_func(f"{op}_<>", self.dtype, self._s)
+        return NotImplemented if f is None else wrap_s(f(other))
 
     def __eq__(self, other: Any) -> Series:  # type: ignore[override]
         return self._comp(other, "eq")
@@ -546,9 +542,7 @@ class Series:
         return result
 
     def __invert__(self) -> Series:
-        if self.dtype == Boolean:
-            return wrap_s(self._s._not())
-        return NotImplemented
+        return wrap_s(self._s._not()) if self.dtype == Boolean else NotImplemented
 
     @overload
     def __mul__(self, other: pli.DataFrame) -> pli.DataFrame:  # type: ignore[misc]
@@ -670,36 +664,32 @@ class Series:
                 Int64,
             }:
                 if idx_type == UInt32:
-                    if idxs.dtype in {Int64, UInt64}:
-                        if idxs.max() >= 2**32:  # type: ignore[operator]
-                            raise ValueError(
-                                "Index positions should be smaller than 2^32."
-                            )
-                    if idxs.dtype == Int64:
-                        if idxs.min() < -(2**32):  # type: ignore[operator]
-                            raise ValueError(
-                                "Index positions should be bigger than -2^32 + 1."
-                            )
-                if idxs.dtype in {Int8, Int16, Int32, Int64}:
-                    if idxs.min() < 0:  # type: ignore[operator]
-                        if idx_type == UInt32:
-                            if idxs.dtype in {Int8, Int16}:
-                                idxs = idxs.cast(Int32)
-                        else:
-                            if idxs.dtype in {Int8, Int16, Int32}:
-                                idxs = idxs.cast(Int64)
-
-                        # Update negative indexes to absolute indexes.
-                        return (
-                            idxs.to_frame()
-                            .select(
-                                pli.when(pli.col(idxs.name) < 0)
-                                .then(self.len() + pli.col(idxs.name))
-                                .otherwise(pli.col(idxs.name))
-                                .cast(idx_type)
-                            )
-                            .to_series(0)
+                    if idxs.dtype in {Int64, UInt64} and idxs.max() >= 2**32:
+                        raise ValueError(
+                            "Index positions should be smaller than 2^32."
                         )
+                    if idxs.dtype == Int64 and idxs.min() < -(2**32):
+                        raise ValueError(
+                            "Index positions should be bigger than -2^32 + 1."
+                        )
+                if idxs.dtype in {Int8, Int16, Int32, Int64} and idxs.min() < 0:
+                    if idx_type == UInt32:
+                        if idxs.dtype in {Int8, Int16}:
+                            idxs = idxs.cast(Int32)
+                    elif idxs.dtype in {Int8, Int16, Int32}:
+                        idxs = idxs.cast(Int64)
+
+                    # Update negative indexes to absolute indexes.
+                    return (
+                        idxs.to_frame()
+                        .select(
+                            pli.when(pli.col(idxs.name) < 0)
+                            .then(self.len() + pli.col(idxs.name))
+                            .otherwise(pli.col(idxs.name))
+                            .cast(idx_type)
+                        )
+                        .to_series(0)
+                    )
 
                 return idxs.cast(idx_type)
 
@@ -721,9 +711,8 @@ class Series:
                         if idx_type == UInt32:
                             if idxs.dtype in (np.int8, np.int16):
                                 idxs = idxs.astype(np.int32)
-                        else:
-                            if idxs.dtype in (np.int8, np.int16, np.int32):
-                                idxs = idxs.astype(np.int64)
+                        elif idxs.dtype in (np.int8, np.int16, np.int32):
+                            idxs = idxs.astype(np.int64)
 
                         # Update negative indexes to absolute indexes.
                         idxs = np.where(idxs < 0, self.len() + idxs, idxs)
@@ -795,7 +784,6 @@ class Series:
             #     to absolute indexes.
             return wrap_s(self._s.take_with_series(self._pos_idxs(item)._s))
 
-        # Integer.
         elif isinstance(item, int):
             if item < 0:
                 item = self.len() + item
@@ -805,27 +793,19 @@ class Series:
                     return NotImplemented
                 out = f(item)
                 if self.dtype == List:
-                    if out is None:
-                        return None
-                    return wrap_s(out)
+                    return None if out is None else wrap_s(out)
                 return out
 
             return self._s.get_idx(item)
 
-        # Slice.
         elif isinstance(item, slice):
             return PolarsSlice(self).apply(item)
 
-        # Range.
         elif isinstance(item, range):
             return self[range_to_slice(item)]
 
-        # Sequence of integers (slow to check if sequence contains all integers).
         elif is_int_sequence(item):
             return wrap_s(self._s.take_with_series(self._pos_idxs(Series("", item))._s))
-
-        # Check for boolean masks last as this is deprecated functionality and
-        # thus can be a slow path.
 
         elif isinstance(item, Series) and item.dtype == Boolean:
             warnings.warn(
@@ -850,7 +830,6 @@ class Series:
             )
             return wrap_s(self._s.filter(Series("", item)._s))
 
-        # Sequence of boolean masks (slow to check if sequence contains all booleans).
         elif is_bool_sequence(item):
             warnings.warn(
                 "passing a boolean mask to Series.__getitem__ is being deprecated; "
@@ -916,66 +895,65 @@ class Series:
         if self._s.n_chunks() > 1:
             self._s.rechunk(in_place=True)
 
-        s = self._s
-
-        if method == "__call__":
-            if not ufunc.nout == 1:
-                raise NotImplementedError(
-                    "Only ufuncs that return one 1D array, are supported."
-                )
-
-            args: list[int | float | np.ndarray[Any, Any]] = []
-
-            for arg in inputs:
-                if isinstance(arg, (int, float, np.ndarray)):
-                    args.append(arg)
-                elif isinstance(arg, Series):
-                    args.append(arg.view(ignore_nulls=True))
-                else:
-                    raise ValueError(f"Unsupported type {type(arg)} for {arg}.")
-
-            # Get minimum dtype needed to be able to cast all input arguments to the
-            # same dtype.
-            dtype_char_minimum = np.result_type(*args).char
-
-            # Get all possible output dtypes for ufunc.
-            # Input dtypes and output dtypes seem to always match for ufunc.types,
-            # so pick all the different output dtypes.
-            dtypes_ufunc = [
-                input_output_type[-1]
-                for input_output_type in ufunc.types
-                if supported_numpy_char_code(input_output_type[-1])
-            ]
-
-            # Get the first ufunc dtype from all possible ufunc dtypes for which
-            # the input arguments can be safely cast to that ufunc dtype.
-            for dtype_ufunc in dtypes_ufunc:
-                if np.can_cast(dtype_char_minimum, dtype_ufunc):
-                    dtype_char_minimum = dtype_ufunc
-                    break
-
-            # Override minimum dtype if requested.
-            dtype_char = (
-                np.dtype(kwargs.pop("dtype")).char
-                if "dtype" in kwargs
-                else dtype_char_minimum
-            )
-
-            f = get_ffi_func("apply_ufunc_<>", numpy_char_code_to_dtype(dtype_char), s)
-
-            if f is None:
-                raise NotImplementedError(
-                    "Could not find "
-                    f"`apply_ufunc_{numpy_char_code_to_dtype(dtype_char)}`."
-                )
-
-            series = f(lambda out: ufunc(*args, out=out, dtype=dtype_char, **kwargs))
-            return wrap_s(series)
-        else:
+        if method != "__call__":
             raise NotImplementedError(
                 "Only `__call__` is implemented for numpy ufuncs on a Series, got"
                 f" `{method}`."
             )
+        if ufunc.nout != 1:
+            raise NotImplementedError(
+                "Only ufuncs that return one 1D array, are supported."
+            )
+
+        args: list[int | float | np.ndarray[Any, Any]] = []
+
+        for arg in inputs:
+            if isinstance(arg, (int, float, np.ndarray)):
+                args.append(arg)
+            elif isinstance(arg, Series):
+                args.append(arg.view(ignore_nulls=True))
+            else:
+                raise ValueError(f"Unsupported type {type(arg)} for {arg}.")
+
+        # Get minimum dtype needed to be able to cast all input arguments to the
+        # same dtype.
+        dtype_char_minimum = np.result_type(*args).char
+
+        # Get all possible output dtypes for ufunc.
+        # Input dtypes and output dtypes seem to always match for ufunc.types,
+        # so pick all the different output dtypes.
+        dtypes_ufunc = [
+            input_output_type[-1]
+            for input_output_type in ufunc.types
+            if supported_numpy_char_code(input_output_type[-1])
+        ]
+
+        # Get the first ufunc dtype from all possible ufunc dtypes for which
+        # the input arguments can be safely cast to that ufunc dtype.
+        for dtype_ufunc in dtypes_ufunc:
+            if np.can_cast(dtype_char_minimum, dtype_ufunc):
+                dtype_char_minimum = dtype_ufunc
+                break
+
+        # Override minimum dtype if requested.
+        dtype_char = (
+            np.dtype(kwargs.pop("dtype")).char
+            if "dtype" in kwargs
+            else dtype_char_minimum
+        )
+
+        s = self._s
+
+        f = get_ffi_func("apply_ufunc_<>", numpy_char_code_to_dtype(dtype_char), s)
+
+        if f is None:
+            raise NotImplementedError(
+                "Could not find "
+                f"`apply_ufunc_{numpy_char_code_to_dtype(dtype_char)}`."
+            )
+
+        series = f(lambda out: ufunc(*args, out=out, dtype=dtype_char, **kwargs))
+        return wrap_s(series)
 
     def _repr_html_(self) -> str:
         """Format output data in HTML for display in Jupyter Notebooks."""
@@ -1313,9 +1291,11 @@ class Series:
         1.0
 
         """
-        if not self.is_numeric():
-            return None
-        return self.to_frame().select(pli.col(self.name).std(ddof)).to_series()[0]
+        return (
+            self.to_frame().select(pli.col(self.name).std(ddof)).to_series()[0]
+            if self.is_numeric()
+            else None
+        )
 
     def var(self, ddof: int = 1) -> float | None:
         """
@@ -1335,9 +1315,11 @@ class Series:
         1.0
 
         """
-        if not self.is_numeric():
-            return None
-        return self.to_frame().select(pli.col(self.name).var(ddof)).to_series()[0]
+        return (
+            self.to_frame().select(pli.col(self.name).var(ddof)).to_series()[0]
+            if self.is_numeric()
+            else None
+        )
 
     def median(self) -> float:
         """
@@ -1550,11 +1532,10 @@ class Series:
         ]
 
         """
-        if in_place:
-            self._s.rename(name)
-            return self
-        else:
+        if not in_place:
             return self.alias(name)
+        self._s.rename(name)
+        return self
 
     def chunk_lengths(self) -> list[int]:
         """
@@ -1939,11 +1920,10 @@ class Series:
         ]
 
         """
-        if in_place:
-            self._s = self._s.sort(reverse)
-            return self
-        else:
+        if not in_place:
             return wrap_s(self._s.sort(reverse))
+        self._s = self._s.sort(reverse)
+        return self
 
     def top_k(self, k: int = 5, reverse: bool = False) -> Series:
         r"""
@@ -2611,9 +2591,7 @@ class Series:
         <class 'list'>
 
         """
-        if use_pyarrow:
-            return self.to_arrow().to_pylist()
-        return self._s.to_list()
+        return self.to_arrow().to_pylist() if use_pyarrow else self._s.to_list()
 
     def rechunk(self, in_place: bool = False) -> Series:
         """
@@ -2807,21 +2785,21 @@ class Series:
             return self.to_arrow().to_numpy(
                 *args, zero_copy_only=zero_copy_only, writable=writable
             )
+        if not self.has_validity():
+            np_array = (
+                convert_to_date(self.view(ignore_nulls=True))
+                if self.is_datelike()
+                else self.view(ignore_nulls=True)
+            )
+        elif self.is_datelike():
+            np_array = convert_to_date(self._s.to_numpy())
         else:
-            if not self.has_validity():
-                if self.is_datelike():
-                    np_array = convert_to_date(self.view(ignore_nulls=True))
-                else:
-                    np_array = self.view(ignore_nulls=True)
-            elif self.is_datelike():
-                np_array = convert_to_date(self._s.to_numpy())
-            else:
-                np_array = self._s.to_numpy()
+            np_array = self._s.to_numpy()
 
-            if writable and not np_array.flags.writeable:
-                return np_array.copy()
-            else:
-                return np_array
+        if writable and not np_array.flags.writeable:
+            return np_array.copy()
+        else:
+            return np_array
 
     def to_arrow(self) -> pa.Array:
         """
@@ -2909,9 +2887,7 @@ class Series:
 
         """
         f = get_ffi_func("set_with_mask_<>", self.dtype, self._s)
-        if f is None:
-            return NotImplemented
-        return wrap_s(f(filter._s, value))
+        return NotImplemented if f is None else wrap_s(f(filter._s, value))
 
     def set_at_idx(
         self,
@@ -4921,12 +4897,11 @@ class SeriesIter:
         return self
 
     def __next__(self) -> Any:
-        if self.i < self.len:
-            i = self.i
-            self.i += 1
-            return self.s[i]
-        else:
+        if self.i >= self.len:
             raise StopIteration
+        i = self.i
+        self.i += 1
+        return self.s[i]
 
 
 def _resolve_datetime_dtype(

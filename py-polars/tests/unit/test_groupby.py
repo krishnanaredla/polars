@@ -73,11 +73,7 @@ def test_groupby_rolling_negative_offset_3914() -> None:
         pl.count().alias("count")
     )["count"].to_list() == [0, 0, 1, 2, 2]
 
-    df = pl.DataFrame(
-        {
-            "ints": range(0, 20),
-        }
-    )
+    df = pl.DataFrame({"ints": range(20)})
 
     assert df.groupby_rolling(index_column="ints", period="2i", offset="-5i",).agg(
         [pl.col("ints").alias("matches")]

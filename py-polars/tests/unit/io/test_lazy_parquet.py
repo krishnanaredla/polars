@@ -107,13 +107,21 @@ def test_parquet_stats(io_test_dir: str) -> None:
     ).collect()[0, "a"] == 9.0
 
     assert (
-        pl.scan_parquet(file).filter(4 > pl.col("a")).select(pl.col("a").sum())
-    ).collect()[0, "a"] == 9.0
+        pl.scan_parquet(file)
+        .filter(pl.col("a") < 4)
+        .select(pl.col("a").sum())
+        .collect()[0, "a"]
+        == 9.0
+    )
 
     assert (
-        pl.scan_parquet(file).filter(4 < pl.col("a")).select(pl.col("a").sum())
-    ).collect()[0, "a"] == 10.0
-    assert pl.scan_parquet(file).filter((pl.col("a") * 10) > 5.0).collect().shape == (
+        pl.scan_parquet(file)
+        .filter(pl.col("a") > 4)
+        .select(pl.col("a").sum())
+        .collect()[0, "a"]
+        == 10.0
+    )
+    assert pl.scan_parquet(file).filter(pl.col("a") > 0.5).collect().shape == (
         8,
         1,
     )

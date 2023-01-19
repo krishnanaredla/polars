@@ -148,9 +148,7 @@ class Expr:
         return self._to_expr(other)._pyexpr
 
     def _to_expr(self, other: Any) -> Expr:
-        if isinstance(other, Expr):
-            return other
-        return pli.lit(other)
+        return other if isinstance(other, Expr) else pli.lit(other)
 
     def _repr_html_(self) -> str:
         return self._pyexpr.to_str()
@@ -2156,11 +2154,10 @@ class Expr:
                 " 'backward' or 'forward'"
             )
 
-        if value is not None:
-            value = expr_to_lit_or_expr(value, str_to_lit=True)
-            return wrap_expr(self._pyexpr.fill_null(value._pyexpr))
-        else:
+        if value is None:
             return wrap_expr(self._pyexpr.fill_null_with_strategy(strategy, limit))
+        value = expr_to_lit_or_expr(value, str_to_lit=True)
+        return wrap_expr(self._pyexpr.fill_null(value._pyexpr))
 
     def fill_nan(self, fill_value: int | float | Expr | None) -> Expr:
         """
@@ -3379,10 +3376,7 @@ class Expr:
 
         """
         if isinstance(other, Sequence) and not isinstance(other, str):
-            if len(other) == 0:
-                other = pli.lit(None)
-            else:
-                other = pli.lit(pli.Series(other))
+            other = pli.lit(None) if len(other) == 0 else pli.lit(pli.Series(other))
         else:
             other = expr_to_lit_or_expr(other, str_to_lit=False)
         return wrap_expr(self._pyexpr.is_in(other._pyexpr))

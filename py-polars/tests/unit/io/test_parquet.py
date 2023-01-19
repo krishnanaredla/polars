@@ -37,8 +37,8 @@ def test_to_from_buffer(
     df: pl.DataFrame, compressions: list[ParquetCompression]
 ) -> None:
     for compression in compressions:
+        buf = io.BytesIO()
         if compression == "lzo":
-            buf = io.BytesIO()
             # Writing lzo compressed parquet files is not supported for now.
             with pytest.raises(pl.ArrowError):
                 df.write_parquet(buf, compression=compression, use_pyarrow=False)
@@ -56,7 +56,6 @@ def test_to_from_buffer(
             with pytest.raises(pl.ArrowError):
                 _ = pl.read_parquet(buf)
         else:
-            buf = io.BytesIO()
             df.write_parquet(buf, compression=compression)
             buf.seek(0)
             read_df = pl.read_parquet(buf)
@@ -203,18 +202,8 @@ def test_streaming_parquet_glob_5900(io_test_dir: str) -> None:
 
 
 def test_chunked_round_trip() -> None:
-    df1 = pl.DataFrame(
-        {
-            "a": [1] * 2,
-            "l": [[1] for j in range(0, 2)],
-        }
-    )
-    df2 = pl.DataFrame(
-        {
-            "a": [2] * 3,
-            "l": [[2] for j in range(0, 3)],
-        }
-    )
+    df1 = pl.DataFrame({"a": [1] * 2, "l": [[1] for _ in range(2)]})
+    df2 = pl.DataFrame({"a": [2] * 3, "l": [[2] for _ in range(3)]})
 
     df = df1.vstack(df2)
 

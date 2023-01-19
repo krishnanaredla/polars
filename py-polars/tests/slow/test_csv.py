@@ -13,8 +13,8 @@ def test_csv_statistics_offset() -> None:
 
 
 def test_csv_scan_categorical() -> None:
-    N = 5_000
     if os.name != "nt":
+        N = 5_000
         pl.DataFrame({"x": ["A"] * N}).write_csv("/tmp/test_csv_scan_categorical.csv")
         df = pl.scan_csv(
             "/tmp/test_csv_scan_categorical.csv", dtypes={"x": pl.Categorical}

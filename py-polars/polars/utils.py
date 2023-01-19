@@ -79,24 +79,20 @@ def _timedelta_to_pl_duration(td: timedelta | str | None) -> str | None:
     """Convert python timedelta to a polars duration string."""
     if td is None or isinstance(td, str):
         return td
-    else:
-        d = td.days and f"{td.days}d" or ""
-        s = td.seconds and f"{td.seconds}s" or ""
-        us = td.microseconds and f"{td.microseconds}us" or ""
-        return f"{d}{s}{us}"
+    d = td.days and f"{td.days}d" or ""
+    s = td.seconds and f"{td.seconds}s" or ""
+    us = td.microseconds and f"{td.microseconds}us" or ""
+    return f"{d}{s}{us}"
 
 
 def _datetime_to_pl_timestamp(dt: datetime, tu: TimeUnit | None) -> int:
     """Convert a python datetime to a timestamp in nanoseconds."""
     if tu == "ns":
         return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1e9)
-    elif tu == "us":
+    elif tu == "us" or tu != "ms" and tu is None:
         return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1e6)
     elif tu == "ms":
         return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1e3)
-    elif tu is None:
-        # python has us precision
-        return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1e6)
     else:
         raise ValueError(f"tu must be one of {{'ns', 'us', 'ms'}}, got {tu}")
 
@@ -109,13 +105,10 @@ def _time_to_pl_time(t: time) -> int:
 def _timedelta_to_pl_timedelta(td: timedelta, tu: TimeUnit | None = None) -> int:
     if tu == "ns":
         return int(td.total_seconds() * 1e9)
-    elif tu == "us":
+    elif tu == "us" or tu != "ms" and tu is None:
         return int(td.total_seconds() * 1e6)
     elif tu == "ms":
         return int(td.total_seconds() * 1e3)
-    elif tu is None:
-        # python has us precision
-        return int(td.total_seconds() * 1e6)
     else:
         raise ValueError(f"tu must be one of {{'ns', 'us', 'ms'}}, got {tu}")
 
@@ -172,7 +165,7 @@ def is_str_sequence(
     Note that a single string is a sequence of strings by definition, use
     `allow_str=False` to return False on a single string.
     """
-    if allow_str is False and isinstance(val, str):
+    if not allow_str and isinstance(val, str):
         return False
     return isinstance(val, Sequence) and _is_iterable_of(val, str)
 
@@ -225,12 +218,12 @@ def handle_projection_columns(
 def _to_python_time(value: int) -> time:
     if value == 0:
         return time(microsecond=0)
-    value = value // 1_000
+    value //= 1_000
     microsecond = value
     seconds = (microsecond // 1000_000) % 60
     minutes = (microsecond // (1000_000 * 60)) % 60
     hours = (microsecond // (1000_000 * 60 * 60)) % 24
-    microsecond = microsecond - (seconds + minutes * 60 + hours * 3600) * 1000_000
+    microsecond -= (seconds + minutes * 60 + hours * 3600) * 1000_000
 
     return time(hour=hours, minute=minutes, second=seconds, microsecond=microsecond)
 
@@ -250,10 +243,7 @@ def _prepare_row_count_args(
     row_count_name: str | None = None,
     row_count_offset: int = 0,
 ) -> tuple[str, int] | None:
-    if row_count_name is not None:
-        return (row_count_name, row_count_offset)
-    else:
-        return None
+    return None if row_count_name is None else (row_count_name, row_count_offset)
 
 
 EPOCH = datetime(1970, 1, 1).replace(tzinfo=None)
@@ -316,11 +306,11 @@ def _to_python_datetime(
 def _parse_fixed_tz_offset(offset: str) -> tzinfo:
     try:
         # use fromisoformat to parse the offset
-        dt_offset = datetime.fromisoformat("2000-01-01T00:00:00" + offset)
+        dt_offset = datetime.fromisoformat(f"2000-01-01T00:00:00{offset}")
 
-        # alternatively, we parse the offset ourselves extracting hours and
-        # minutes, then we can construct:
-        # tzinfo=timezone(timedelta(hours=..., minutes=...))
+            # alternatively, we parse the offset ourselves extracting hours and
+            # minutes, then we can construct:
+            # tzinfo=timezone(timedelta(hours=..., minutes=...))
     except ValueError:
         raise ValueError(f"Offset: {offset} not understood.") from None
 
@@ -344,9 +334,7 @@ def _in_notebook() -> bool:
 
         if "IPKernelApp" not in get_ipython().config:  # pragma: no cover
             return False
-    except ImportError:
-        return False
-    except AttributeError:
+    except (ImportError, AttributeError):
         return False
     return True
 
